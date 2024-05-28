@@ -1,55 +1,107 @@
-import pandas as pd
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from sklearn.metrics import accuracy_score
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
-# Load the dataset
-file_path = 'spotify.csv'
-df = pd.read_csv(file_path)
+# Load data
+file_path = 'spotify_cleaned_labeled.csv'
+data = pd.read_csv(file_path)
 
-# Select features and target
-features = df.drop(columns=['streams'])
-target = df['streams']
+# Convert string labels to numerical labels
+label_encoder = LabelEncoder()
+data['stream_class'] = label_encoder.fit_transform(data['stream_class'])
 
-# Encode categorical features
-categorical_columns = ['track_name', 'artist(s)_name', 'key', 'mode']
-for col in categorical_columns:
-    le = LabelEncoder()
-    features[col] = le.fit_transform(features[col])
-
-# Normalize numerical features
+# Select numerical columns and target
 numerical_columns = ['artist_count', 'released_year', 'released_month', 'released_day',
                      'in_spotify_playlists', 'in_spotify_charts', 'in_apple_playlists', 
                      'in_apple_charts', 'in_deezer_playlists', 'in_deezer_charts', 
                      'in_shazam_charts', 'bpm', 'danceability_%', 'valence_%', 'energy_%', 
                      'acousticness_%', 'instrumentalness_%', 'liveness_%', 'speechiness_%']
+X = data[numerical_columns].values
+y = data['stream_class'].values
 
+# Preprocessing
 scaler = StandardScaler()
-features[numerical_columns] = scaler.fit_transform(features[numerical_columns])
+X = scaler.fit_transform(X)
 
-# Split the data into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Build the neural network model
-model = Sequential([
-    Dense(128, input_dim=X_train.shape[1], activation='relu'),
-    Dense(64, activation='relu'),
-    Dense(32, activation='relu'),
-    Dense(1)
-])
+# Convert to PyTorch tensors
+X_train = torch.tensor(X_train, dtype=torch.float32)
+X_test = torch.tensor(X_test, dtype=torch.float32)
+y_train = torch.tensor(y_train, dtype=torch.long)
+y_test = torch.tensor(y_test, dtype=torch.long)
 
-# Compile the model
-model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+# Define neural network model
+class SongClassifier(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(SongClassifier, self).__init__()
+        self.fc1 = nn.Linear(input_dim, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, output_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.5)  # Increased dropout to prevent overfitting
+        self.batch_norm1 = nn.BatchNorm1d(128)
+        self.batch_norm2 = nn.BatchNorm1d(64)
+    
+    def forward(self, x):
+        x = self.relu(self.batch_norm1(self.fc1(x)))
+        x = self.dropout(x)
+        x = self.relu(self.batch_norm2(self.fc2(x)))
+        x = self.dropout(x)
+        x = self.fc3(x)
+        return x
 
-# Train the model
-history = model.fit(X_train, y_train, epochs=100, batch_size=32, validation_split=0.2)
+input_dim = X_train.shape[1]
+output_dim = len(np.unique(y))
+model = SongClassifier(input_dim, output_dim)
 
-# Evaluate the model
-loss, mae = model.evaluate(X_test, y_test)
-print(f'Test Mean Absolute Error: {mae}')
+# Loss and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# Save the model
-model.save('music_streams_prediction_model.h5')
+# Training the model
+num_epochs = 100  # Increased number of epochs
+batch_size = 32   # Changed batch size
+train_losses = []
+
+for epoch in range(num_epochs):
+    model.train()
+    permutation = torch.randperm(X_train.size()[0])
+    epoch_loss = 0.0
+    for i in range(0, X_train.size()[0], batch_size):
+        indices = permutation[i:i+batch_size]
+        batch_X, batch_y = X_train[indices], y_train[indices]
+        
+        optimizer.zero_grad()
+        outputs = model(batch_X)
+        loss = criterion(outputs, batch_y)
+        loss.backward()
+        optimizer.step()
+        
+        epoch_loss += loss.item()
+    
+    average_loss = epoch_loss / (X_train.size()[0] // batch_size)
+    train_losses.append(average_loss)
+    print(f'Epoch {epoch+1}/{num_epochs}, Loss: {average_loss}')
+
+# Plotting training loss
+plt.plot(train_losses, label='Training Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Testing the model
+model.eval()
+with torch.no_grad():
+    outputs = model(X_test)
+    _, predicted = torch.max(outputs, 1)
+    accuracy = accuracy_score(y_test, predicted)
+    print(f'Accuracy: {accuracy*100:.2f}%')

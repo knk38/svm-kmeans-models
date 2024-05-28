@@ -29,12 +29,18 @@ def preprocess_csv(input_file_path, output_file_path):
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.dropna(inplace=True)
     
-    # Save the cleaned DataFrame to a new CSV file
+    # Calculate mean of streams
+    mean_streams = df['streams'].mean()
+    
+    # Create class labels based on the mean
+    df['stream_class'] = pd.cut(df['streams'], bins=[-np.inf, mean_streams/2, mean_streams*1.5, np.inf], labels=['Low', 'Average', 'High'])
+    
+    # Save the cleaned and labeled DataFrame to a new CSV file
     df.to_csv(output_file_path, index=False, encoding='utf-8')
 
 # Define file paths
-input_file_path = '/content/spotify.csv'  # Input CSV file path
-output_file_path = '/content/spotify_cleaned.csv'  # Output CSV file path
+input_file_path = 'spotify.csv'  # Input CSV file path
+output_file_path = 'spotify_cleaned_labeled.csv'  # Output CSV file path
 
 # Preprocess the CSV file
 preprocess_csv(input_file_path, output_file_path)
