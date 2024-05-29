@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.metrics import accuracy_score
 import pandas as pd
 import numpy as np
@@ -17,8 +17,7 @@ label_encoder = LabelEncoder()
 data['stream_class'] = label_encoder.fit_transform(data['stream_class'])
 
 # Select numerical columns and target
-numerical_columns = ['artist_count', 'released_year', 'released_month', 'released_day',
-                     'in_spotify_playlists', 'in_spotify_charts', 'in_apple_playlists', 
+numerical_columns = ['artist_count','in_spotify_playlists', 'in_spotify_charts', 'in_apple_playlists', 
                      'in_apple_charts', 'in_deezer_playlists', 'in_deezer_charts', 
                      'in_shazam_charts', 'bpm', 'danceability_%', 'valence_%', 'energy_%', 
                      'acousticness_%', 'instrumentalness_%', 'liveness_%', 'speechiness_%']
@@ -26,7 +25,7 @@ X = data[numerical_columns].values
 y = data['stream_class'].values
 
 # Preprocessing
-scaler = StandardScaler()
+scaler = MinMaxScaler(feature_range=(-1, 1))
 X = scaler.fit_transform(X)
 
 # Train-test split
@@ -67,7 +66,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training the model
-num_epochs = 100  # Increased number of epochs
+num_epochs = 150  # Increased number of epochs
 batch_size = 32   # Changed batch size
 train_losses = []
 
@@ -94,7 +93,7 @@ for epoch in range(num_epochs):
 # Plotting training loss
 plt.plot(train_losses, label='Training Loss')
 plt.xlabel('Epoch')
-plt.ylabel('Loss')
+plt.ylabel('Loss') 
 plt.legend()
 plt.show()
 
